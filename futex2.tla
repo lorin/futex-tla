@@ -1,4 +1,4 @@
----- MODULE futex1 ----
+---- MODULE futex2 ----
 EXTENDS Sequences
 
 CONSTANTS Processes, Addresses, Free, Acquired, HasWaiters
@@ -31,7 +31,7 @@ variable lprev;
 begin
 L1: cmpxchg(mem[a], lprev, Free, Acquired);
 L2: if lprev /= Free then
-L3:     mem[a] := HasWaiters;
+L3:     cmpxchg(mem[a], lprev, Acquired, HasWaiters);
 L4:     call futex_wait(a, lprev);
         goto L1;
     end if;

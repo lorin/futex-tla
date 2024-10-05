@@ -2,8 +2,8 @@
 ---- MODULE futex4 ----
 EXTENDS Naturals, Sequences
 
-CONSTANTS Processes, Addresses, Free, Acquired, HasWaiters
-Values == {Free, Acquired, HasWaiters}
+CONSTANTS Processes, Addresses, Free, Acquired, Contended
+Values == {Free, Acquired, Contended}
 
 (*--algorithm futex 
 
@@ -36,13 +36,13 @@ Lcmpx1:
 Ltest1: 
     if lprev /= Free then
 Lcmpx2:   
-        atomic_compare_exchange(mem[a], lprev2, Acquired, HasWaiters);
-        if lprev = HasWaiters \/ lprev2 /= Free then
+        atomic_compare_exchange(mem[a], lprev2, Acquired, Contended);
+        if lprev = Contended \/ lprev2 /= Free then
 call_wait:     
         call futex_wait(a, lprev);
       end if;
 Lcmpx3:   
-        atomic_compare_exchange(mem[a], lprev, Free, HasWaiters);
+        atomic_compare_exchange(mem[a], lprev, Free, Contended);
 Ltest2:   
         if lprev /= Free then 
             goto Lcmpx2;
@@ -58,7 +58,7 @@ begin
 u_xch: 
     atomic_exchange(mem[a], uprev, Free);
 u_wake:
-    if uprev = HasWaiters then
+    if uprev = Contended then
         call futex_wake(a);
     end if;
 u_ret: 
@@ -116,7 +116,7 @@ end process;
 end algorithm;
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "c1dcbb07" /\ chksum(tla) = "b399cae6")
+\* BEGIN TRANSLATION (chksum(pcal) = "3b5f683e" /\ chksum(tla) = "ed33c147")
 \* Parameter addr of procedure futex_wait at line 69 col 22 changed to addr_
 CONSTANT defaultInitValue
 VARIABLES pc, mem, waitq, qlock, a, wake, stack, lprev, lprev2, uprev, addr_, 
@@ -167,10 +167,10 @@ Ltest1(self) == /\ pc[self] = "Ltest1"
 Lcmpx2(self) == /\ pc[self] = "Lcmpx2"
                 /\ lprev2' = [lprev2 EXCEPT ![self] = mem[a]]
                 /\ IF (mem[a]) = Acquired
-                      THEN /\ mem' = [mem EXCEPT ![a] = HasWaiters]
+                      THEN /\ mem' = [mem EXCEPT ![a] = Contended]
                       ELSE /\ TRUE
                            /\ mem' = mem
-                /\ IF lprev[self] = HasWaiters \/ lprev2'[self] /= Free
+                /\ IF lprev[self] = Contended \/ lprev2'[self] /= Free
                       THEN /\ pc' = [pc EXCEPT ![self] = "call_wait"]
                       ELSE /\ pc' = [pc EXCEPT ![self] = "Lcmpx3"]
                 /\ UNCHANGED << waitq, qlock, a, wake, stack, lprev, uprev, 
@@ -191,7 +191,7 @@ call_wait(self) == /\ pc[self] = "call_wait"
 Lcmpx3(self) == /\ pc[self] = "Lcmpx3"
                 /\ lprev' = [lprev EXCEPT ![self] = mem[a]]
                 /\ IF (mem[a]) = Free
-                      THEN /\ mem' = [mem EXCEPT ![a] = HasWaiters]
+                      THEN /\ mem' = [mem EXCEPT ![a] = Contended]
                       ELSE /\ TRUE
                            /\ mem' = mem
                 /\ pc' = [pc EXCEPT ![self] = "Ltest2"]
@@ -225,7 +225,7 @@ u_xch(self) == /\ pc[self] = "u_xch"
                                addr_, val, addr, nxt >>
 
 u_wake(self) == /\ pc[self] = "u_wake"
-                /\ IF uprev[self] = HasWaiters
+                /\ IF uprev[self] = Contended
                       THEN /\ /\ addr' = [addr EXCEPT ![self] = a]
                               /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "futex_wake",
                                                                        pc        |->  "u_ret",

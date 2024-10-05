@@ -1,5 +1,8 @@
-
 ---- MODULE futex ----
+(******************************************************************************)
+(* Model that implements mutexes using futexes                                *)
+(* Locking algorithm is based on Ulrich Drepper's paper "Futexes are tricky"  *)
+(******************************************************************************)
 EXTENDS Naturals, Sequences
 
 CONSTANTS Processes, Addresses, Free, Acquired, Contended

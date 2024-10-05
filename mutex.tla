@@ -1,19 +1,17 @@
 ---- MODULE mutex ----
-EXTENDS TLC
-
 CONSTANT Processes
-
 
 (*--algorithm MutualExclusion
 
 variables lock = {};
 
-process p \in Processes
+process p \in Processes 
 begin
+
 ncs: skip;
 acq: await lock = {};
      lock := {self};
-cs: skip;
+cs:  skip;
 rel: lock := lock \ {self};
      goto ncs;
 end process;

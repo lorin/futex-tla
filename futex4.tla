@@ -11,7 +11,6 @@ variables
     mem = [x \in Addresses |-> Free],
     waitq = [x \in Addresses |-> <<>>], \* a map of addresses to wait queues
     qlock = {},  \* traditional mutex lock used by the kernel on the wait queue. 
-    waiters = 0, \* number of waiters
     a \in Addresses,
     wake = {}; \* processes that have been sent a signal to wake up
 
@@ -48,16 +47,19 @@ end procedure;
 
 procedure futex_wait(addr, val) 
 begin
-WT1: await qlock = {};
+wt_acq: 
+    await qlock = {};
      qlock := {self};
-WT2: if val /= mem[addr] then 
+wt_valcheck: 
+    if val /= mem[addr] then 
         qlock := {};
         return;
     end if;
     \* Add the process to the wait queue for this address
-WT3:  waitq[addr] := Append(waitq[addr], self);
-      qlock := {};
-WT4:
+wt_enq:
+     waitq[addr] := Append(waitq[addr], self);
+     qlock := {};
+wt_wait:
     await self \in wake;
     wake := wake \ {self};
     return;
@@ -66,15 +68,19 @@ end procedure;
 procedure futex_wake(addr) 
 variable p = {};
 begin
-WK1: await qlock = {};
+wk_acq: 
+     await qlock = {};
      qlock := {self};
-WK2: if waitq[addr] /= <<>> then
+wk_deq: 
+     if waitq[addr] /= <<>> then
         p := {Head(waitq[addr])};
         waitq[addr] := Tail(waitq[addr]);
      end if;
-WK3: qlock := {};
-WK4: wake := wake \union p;
-     return;
+wk_rel: 
+    qlock := {};
+wk_wake: 
+    wake := wake \union p;
+    return;
 end procedure;
 
 procedure unlock() 
@@ -99,8 +105,8 @@ end process;
 end algorithm;
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "99cab081" /\ chksum(tla) = "cd196251")
-\* Process p at line 88 col 1 changed to p_
+\* BEGIN TRANSLATION (chksum(pcal) = "80711736" /\ chksum(tla) = "16d2bf3a")
+\* Process p at line 96 col 1 changed to p_
 \* Parameter addr of procedure futex_wait at line 48 col 22 changed to addr_
 CONSTANT defaultInitValue
 VARIABLES pc, mem, waitq, qlock, a, wake, stack, lprev, lprev2, addr_, val, 
@@ -168,7 +174,7 @@ L4(self) == /\ pc[self] = "L4"
                                                         val       |->  val[self] ] >>
                                                     \o stack[self]]
                /\ val' = [val EXCEPT ![self] = lprev[self]]
-            /\ pc' = [pc EXCEPT ![self] = "WT1"]
+            /\ pc' = [pc EXCEPT ![self] = "wt_acq"]
             /\ UNCHANGED << mem, waitq, qlock, a, wake, lprev, lprev2, addr, p, 
                             uprev >>
 
@@ -200,64 +206,79 @@ L7(self) == /\ pc[self] = "L7"
 lock(self) == L1(self) \/ L2(self) \/ L3(self) \/ L4(self) \/ L5(self)
                  \/ L6(self) \/ L7(self)
 
-WT1(self) == /\ pc[self] = "WT1"
-             /\ qlock = {}
-             /\ qlock' = {self}
-             /\ pc' = [pc EXCEPT ![self] = "WT2"]
-             /\ UNCHANGED << mem, waitq, a, wake, stack, lprev, lprev2, addr_, 
-                             val, addr, p, uprev >>
+wt_acq(self) == /\ pc[self] = "wt_acq"
+                /\ qlock = {}
+                /\ qlock' = {self}
+                /\ pc' = [pc EXCEPT ![self] = "wt_valcheck"]
+                /\ UNCHANGED << mem, waitq, a, wake, stack, lprev, lprev2, 
+                                addr_, val, addr, p, uprev >>
 
-WT2(self) == /\ pc[self] = "WT2"
-             /\ IF val[self] /= mem[addr_[self]]
-                   THEN /\ qlock' = {}
-                        /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
-                        /\ addr_' = [addr_ EXCEPT ![self] = Head(stack[self]).addr_]
-                        /\ val' = [val EXCEPT ![self] = Head(stack[self]).val]
-                        /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
-                   ELSE /\ pc' = [pc EXCEPT ![self] = "WT3"]
-                        /\ UNCHANGED << qlock, stack, addr_, val >>
-             /\ UNCHANGED << mem, waitq, a, wake, lprev, lprev2, addr, p, 
-                             uprev >>
+wt_valcheck(self) == /\ pc[self] = "wt_valcheck"
+                     /\ IF val[self] /= mem[addr_[self]]
+                           THEN /\ qlock' = {}
+                                /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
+                                /\ addr_' = [addr_ EXCEPT ![self] = Head(stack[self]).addr_]
+                                /\ val' = [val EXCEPT ![self] = Head(stack[self]).val]
+                                /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
+                           ELSE /\ pc' = [pc EXCEPT ![self] = "wt_enq"]
+                                /\ UNCHANGED << qlock, stack, addr_, val >>
+                     /\ UNCHANGED << mem, waitq, a, wake, lprev, lprev2, addr, 
+                                     p, uprev >>
 
-WT3(self) == /\ pc[self] = "WT3"
-             /\ waitq' = [waitq EXCEPT ![addr_[self]] = Append(waitq[addr_[self]], self)]
-             /\ qlock' = {}
-             /\ pc' = [pc EXCEPT ![self] = "WT4"]
-             /\ UNCHANGED << mem, a, wake, stack, lprev, lprev2, addr_, val, 
-                             addr, p, uprev >>
+wt_enq(self) == /\ pc[self] = "wt_enq"
+                /\ waitq' = [waitq EXCEPT ![addr_[self]] = Append(waitq[addr_[self]], self)]
+                /\ qlock' = {}
+                /\ pc' = [pc EXCEPT ![self] = "wt_wait"]
+                /\ UNCHANGED << mem, a, wake, stack, lprev, lprev2, addr_, val, 
+                                addr, p, uprev >>
 
-WT4(self) == /\ pc[self] = "WT4"
-             /\ self \in wake
-             /\ wake' = wake \ {self}
-             /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
-             /\ addr_' = [addr_ EXCEPT ![self] = Head(stack[self]).addr_]
-             /\ val' = [val EXCEPT ![self] = Head(stack[self]).val]
-             /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
-             /\ UNCHANGED << mem, waitq, qlock, a, lprev, lprev2, addr, p, 
-                             uprev >>
+wt_wait(self) == /\ pc[self] = "wt_wait"
+                 /\ self \in wake
+                 /\ wake' = wake \ {self}
+                 /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
+                 /\ addr_' = [addr_ EXCEPT ![self] = Head(stack[self]).addr_]
+                 /\ val' = [val EXCEPT ![self] = Head(stack[self]).val]
+                 /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
+                 /\ UNCHANGED << mem, waitq, qlock, a, lprev, lprev2, addr, p, 
+                                 uprev >>
 
-futex_wait(self) == WT1(self) \/ WT2(self) \/ WT3(self) \/ WT4(self)
+futex_wait(self) == wt_acq(self) \/ wt_valcheck(self) \/ wt_enq(self)
+                       \/ wt_wait(self)
 
-WK1(self) == /\ pc[self] = "WK1"
-             /\ IF waitq[addr[self]] /= <<>>
-                   THEN /\ p' = [p EXCEPT ![self] = {Head(waitq[addr[self]])}]
-                        /\ waitq' = [waitq EXCEPT ![addr[self]] = Tail(waitq[addr[self]])]
-                   ELSE /\ TRUE
-                        /\ UNCHANGED << waitq, p >>
-             /\ pc' = [pc EXCEPT ![self] = "WK2"]
-             /\ UNCHANGED << mem, qlock, a, wake, stack, lprev, lprev2, addr_, 
-                             val, addr, uprev >>
+wk_acq(self) == /\ pc[self] = "wk_acq"
+                /\ qlock = {}
+                /\ qlock' = {self}
+                /\ pc' = [pc EXCEPT ![self] = "wk_deq"]
+                /\ UNCHANGED << mem, waitq, a, wake, stack, lprev, lprev2, 
+                                addr_, val, addr, p, uprev >>
 
-WK2(self) == /\ pc[self] = "WK2"
-             /\ wake' = (wake \union p[self])
-             /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
-             /\ p' = [p EXCEPT ![self] = Head(stack[self]).p]
-             /\ addr' = [addr EXCEPT ![self] = Head(stack[self]).addr]
-             /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
-             /\ UNCHANGED << mem, waitq, qlock, a, lprev, lprev2, addr_, val, 
-                             uprev >>
+wk_deq(self) == /\ pc[self] = "wk_deq"
+                /\ IF waitq[addr[self]] /= <<>>
+                      THEN /\ p' = [p EXCEPT ![self] = {Head(waitq[addr[self]])}]
+                           /\ waitq' = [waitq EXCEPT ![addr[self]] = Tail(waitq[addr[self]])]
+                      ELSE /\ TRUE
+                           /\ UNCHANGED << waitq, p >>
+                /\ pc' = [pc EXCEPT ![self] = "wk_rel"]
+                /\ UNCHANGED << mem, qlock, a, wake, stack, lprev, lprev2, 
+                                addr_, val, addr, uprev >>
 
-futex_wake(self) == WK1(self) \/ WK2(self)
+wk_rel(self) == /\ pc[self] = "wk_rel"
+                /\ qlock' = {}
+                /\ pc' = [pc EXCEPT ![self] = "wk_wake"]
+                /\ UNCHANGED << mem, waitq, a, wake, stack, lprev, lprev2, 
+                                addr_, val, addr, p, uprev >>
+
+wk_wake(self) == /\ pc[self] = "wk_wake"
+                 /\ wake' = (wake \union p[self])
+                 /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
+                 /\ p' = [p EXCEPT ![self] = Head(stack[self]).p]
+                 /\ addr' = [addr EXCEPT ![self] = Head(stack[self]).addr]
+                 /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
+                 /\ UNCHANGED << mem, waitq, qlock, a, lprev, lprev2, addr_, 
+                                 val, uprev >>
+
+futex_wake(self) == wk_acq(self) \/ wk_deq(self) \/ wk_rel(self)
+                       \/ wk_wake(self)
 
 U1(self) == /\ pc[self] = "U1"
             /\ uprev' = [uprev EXCEPT ![self] = mem[a]]
@@ -270,7 +291,7 @@ U1(self) == /\ pc[self] = "U1"
                                                                    addr      |->  addr[self] ] >>
                                                                \o stack[self]]
                        /\ p' = [p EXCEPT ![self] = {}]
-                       /\ pc' = [pc EXCEPT ![self] = "WK1"]
+                       /\ pc' = [pc EXCEPT ![self] = "wk_acq"]
                   ELSE /\ pc' = [pc EXCEPT ![self] = "U2"]
                        /\ UNCHANGED << stack, addr, p >>
             /\ UNCHANGED << waitq, qlock, a, wake, lprev, lprev2, addr_, val >>

@@ -6,7 +6,7 @@ Ulrich Drepper, [Futexes are tricky][1], June 27, 2004.
 
 Hubertus Franke, Rusty Russel, and Matthew Kirkwood, [Fuss, Futexes and Furwocks: Fast Userlevel Locking in Linux][2], Proceedings of the 2002 Ottawa Linux Summit, 2002.
 
-Darren Hart, [a futex overview and update][3], November 11, 2009
+Darren Hart, [a futex overview and update][3], LWN, November 11, 2009
 
 
 [1]: https://dept-info.labri.fr/~denis/Enseignement/2008-IR/Articles/01-futex.pdf
@@ -15,7 +15,7 @@ Darren Hart, [a futex overview and update][3], November 11, 2009
 
 ## Code
 
-## Linux kernel
+### Linux kernel
 
 * [Basic futex operation and ordering guarantees (comments)][4]
 * [futex_wait]
@@ -27,9 +27,9 @@ Darren Hart, [a futex overview and update][3], November 11, 2009
 [futex_wake]: https://github.com/torvalds/linux/blob/v6.11/kernel/futex/waitwake.c#L155
 [struct futex_hash_bucket]: https://github.com/torvalds/linux/blob/v6.11/kernel/futex/futex.h#L115
 
-## glibc
+### glibc
 
-[GNU C library POSIX threads implementation (nptl)][nptl].
+[GNU C library POSIX threads implementation (nptl)][nptl]
 
 [nptl]: https://sourceware.org/git/?p=glibc.git;a=tree;f=nptl;hb=HEAD
 

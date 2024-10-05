@@ -18,7 +18,7 @@ end process;
 
 end algorithm;
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "5e1306a3" /\ chksum(tla) = "551b377b")
+\* BEGIN TRANSLATION (chksum(pcal) = "744f3186" /\ chksum(tla) = "13afaba7")
 VARIABLES pc, lock
 
 vars == << pc, lock >>
@@ -35,6 +35,7 @@ ncs(self) == /\ pc[self] = "ncs"
              /\ lock' = lock
 
 acq(self) == /\ pc[self] = "acq"
+             /\ lock = {}
              /\ lock' = {self}
              /\ pc' = [pc EXCEPT ![self] = "cs"]
 
@@ -63,7 +64,6 @@ Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 \* END TRANSLATION 
 
 InCriticalSection(p) == pc[p] = "cs"
-
 MutualExclusion == \A p1,p2 \in Processes : InCriticalSection(p1) /\ InCriticalSection(p2) => p1 = p2
 
 ====

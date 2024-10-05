@@ -86,11 +86,14 @@ end procedure;
 procedure unlock() 
 variable uprev;
 begin
-U1: atomic_exchange(mem[a], uprev, Free);
+u_xch: 
+    atomic_exchange(mem[a], uprev, Free);
+u_wake:
     if uprev = HasWaiters then
         call futex_wake(a);
     end if;
-U2: return;
+u_ret: 
+    return;
 end procedure;
 
 process p \in Processes
@@ -105,8 +108,8 @@ end process;
 end algorithm;
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "80711736" /\ chksum(tla) = "16d2bf3a")
-\* Process p at line 96 col 1 changed to p_
+\* BEGIN TRANSLATION (chksum(pcal) = "3e56b840" /\ chksum(tla) = "144082ef")
+\* Process p at line 99 col 1 changed to p_
 \* Parameter addr of procedure futex_wait at line 48 col 22 changed to addr_
 CONSTANT defaultInitValue
 VARIABLES pc, mem, waitq, qlock, a, wake, stack, lprev, lprev2, addr_, val, 
@@ -280,30 +283,36 @@ wk_wake(self) == /\ pc[self] = "wk_wake"
 futex_wake(self) == wk_acq(self) \/ wk_deq(self) \/ wk_rel(self)
                        \/ wk_wake(self)
 
-U1(self) == /\ pc[self] = "U1"
-            /\ uprev' = [uprev EXCEPT ![self] = mem[a]]
-            /\ mem' = [mem EXCEPT ![a] = Free]
-            /\ IF uprev'[self] = HasWaiters
-                  THEN /\ /\ addr' = [addr EXCEPT ![self] = a]
-                          /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "futex_wake",
-                                                                   pc        |->  "U2",
-                                                                   p         |->  p[self],
-                                                                   addr      |->  addr[self] ] >>
-                                                               \o stack[self]]
-                       /\ p' = [p EXCEPT ![self] = {}]
-                       /\ pc' = [pc EXCEPT ![self] = "wk_acq"]
-                  ELSE /\ pc' = [pc EXCEPT ![self] = "U2"]
-                       /\ UNCHANGED << stack, addr, p >>
-            /\ UNCHANGED << waitq, qlock, a, wake, lprev, lprev2, addr_, val >>
+u_xch(self) == /\ pc[self] = "u_xch"
+               /\ uprev' = [uprev EXCEPT ![self] = mem[a]]
+               /\ mem' = [mem EXCEPT ![a] = Free]
+               /\ pc' = [pc EXCEPT ![self] = "u_wake"]
+               /\ UNCHANGED << waitq, qlock, a, wake, stack, lprev, lprev2, 
+                               addr_, val, addr, p >>
 
-U2(self) == /\ pc[self] = "U2"
-            /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
-            /\ uprev' = [uprev EXCEPT ![self] = Head(stack[self]).uprev]
-            /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
-            /\ UNCHANGED << mem, waitq, qlock, a, wake, lprev, lprev2, addr_, 
-                            val, addr, p >>
+u_wake(self) == /\ pc[self] = "u_wake"
+                /\ IF uprev[self] = HasWaiters
+                      THEN /\ /\ addr' = [addr EXCEPT ![self] = a]
+                              /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "futex_wake",
+                                                                       pc        |->  "u_ret",
+                                                                       p         |->  p[self],
+                                                                       addr      |->  addr[self] ] >>
+                                                                   \o stack[self]]
+                           /\ p' = [p EXCEPT ![self] = {}]
+                           /\ pc' = [pc EXCEPT ![self] = "wk_acq"]
+                      ELSE /\ pc' = [pc EXCEPT ![self] = "u_ret"]
+                           /\ UNCHANGED << stack, addr, p >>
+                /\ UNCHANGED << mem, waitq, qlock, a, wake, lprev, lprev2, 
+                                addr_, val, uprev >>
 
-unlock(self) == U1(self) \/ U2(self)
+u_ret(self) == /\ pc[self] = "u_ret"
+               /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
+               /\ uprev' = [uprev EXCEPT ![self] = Head(stack[self]).uprev]
+               /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
+               /\ UNCHANGED << mem, waitq, qlock, a, wake, lprev, lprev2, 
+                               addr_, val, addr, p >>
+
+unlock(self) == u_xch(self) \/ u_wake(self) \/ u_ret(self)
 
 ncs(self) == /\ pc[self] = "ncs"
              /\ TRUE
@@ -335,7 +344,7 @@ rel(self) == /\ pc[self] = "rel"
                                                       uprev     |->  uprev[self] ] >>
                                                   \o stack[self]]
              /\ uprev' = [uprev EXCEPT ![self] = defaultInitValue]
-             /\ pc' = [pc EXCEPT ![self] = "U1"]
+             /\ pc' = [pc EXCEPT ![self] = "u_xch"]
              /\ UNCHANGED << mem, waitq, qlock, a, wake, lprev, lprev2, addr_, 
                              val, addr, p >>
 
@@ -356,9 +365,10 @@ Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
 \* END TRANSLATION 
 
-Stuck(x) == /\ pc[x] = "WT4"
+Stuck(x) == /\ pc[x] = "wt_wait"
             /\ p \notin wake
             /\ \A pp \in Processes \ {x} : pc[pp] = "ncs"
+
 
 NoneStuck == ~ \E x \in Processes : Stuck(x)
 

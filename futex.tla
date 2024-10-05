@@ -1,5 +1,5 @@
 
----- MODULE futex4 ----
+---- MODULE futex ----
 EXTENDS Naturals, Sequences
 
 CONSTANTS Processes, Addresses, Free, Acquired, Contended

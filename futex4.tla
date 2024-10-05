@@ -31,18 +31,25 @@ end macro;
 procedure lock() 
 variable lprev, lprev2;
 begin
-L1: atomic_compare_exchange(mem[a], lprev, Free, Acquired);
-L2: if lprev /= Free then
-L3:   atomic_compare_exchange(mem[a], lprev2, Acquired, HasWaiters);
-      if lprev = HasWaiters \/ lprev2 /= Free then
-L4:     call futex_wait(a, lprev);
+Lcmpx1: 
+    atomic_compare_exchange(mem[a], lprev, Free, Acquired);
+Ltest1: 
+    if lprev /= Free then
+Lcmpx2:   
+        atomic_compare_exchange(mem[a], lprev2, Acquired, HasWaiters);
+        if lprev = HasWaiters \/ lprev2 /= Free then
+call_wait:     
+        call futex_wait(a, lprev);
       end if;
-L5:   atomic_compare_exchange(mem[a], lprev, Free, HasWaiters);
-L6:   if lprev /= Free then 
-        goto L3;
+Lcmpx3:   
+        atomic_compare_exchange(mem[a], lprev, Free, HasWaiters);
+Ltest2:   
+        if lprev /= Free then 
+            goto Lcmpx2;
       end if;
     end if;
-L7: return;
+Lret: 
+    return;
 end procedure;
 
 procedure unlock() 
@@ -109,8 +116,8 @@ end process;
 end algorithm;
 
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "22eaead5" /\ chksum(tla) = "59d4eea7")
-\* Parameter addr of procedure futex_wait at line 62 col 22 changed to addr_
+\* BEGIN TRANSLATION (chksum(pcal) = "c1dcbb07" /\ chksum(tla) = "b399cae6")
+\* Parameter addr of procedure futex_wait at line 69 col 22 changed to addr_
 CONSTANT defaultInitValue
 VARIABLES pc, mem, waitq, qlock, a, wake, stack, lprev, lprev2, uprev, addr_, 
           val, addr, nxt
@@ -140,74 +147,75 @@ Init == (* Global variables *)
         /\ stack = [self \in ProcSet |-> << >>]
         /\ pc = [self \in ProcSet |-> "ncs"]
 
-L1(self) == /\ pc[self] = "L1"
-            /\ lprev' = [lprev EXCEPT ![self] = mem[a]]
-            /\ IF (mem[a]) = Free
-                  THEN /\ mem' = [mem EXCEPT ![a] = Acquired]
-                  ELSE /\ TRUE
-                       /\ mem' = mem
-            /\ pc' = [pc EXCEPT ![self] = "L2"]
-            /\ UNCHANGED << waitq, qlock, a, wake, stack, lprev2, uprev, addr_, 
-                            val, addr, nxt >>
+Lcmpx1(self) == /\ pc[self] = "Lcmpx1"
+                /\ lprev' = [lprev EXCEPT ![self] = mem[a]]
+                /\ IF (mem[a]) = Free
+                      THEN /\ mem' = [mem EXCEPT ![a] = Acquired]
+                      ELSE /\ TRUE
+                           /\ mem' = mem
+                /\ pc' = [pc EXCEPT ![self] = "Ltest1"]
+                /\ UNCHANGED << waitq, qlock, a, wake, stack, lprev2, uprev, 
+                                addr_, val, addr, nxt >>
 
-L2(self) == /\ pc[self] = "L2"
-            /\ IF lprev[self] /= Free
-                  THEN /\ pc' = [pc EXCEPT ![self] = "L3"]
-                  ELSE /\ pc' = [pc EXCEPT ![self] = "L7"]
-            /\ UNCHANGED << mem, waitq, qlock, a, wake, stack, lprev, lprev2, 
-                            uprev, addr_, val, addr, nxt >>
+Ltest1(self) == /\ pc[self] = "Ltest1"
+                /\ IF lprev[self] /= Free
+                      THEN /\ pc' = [pc EXCEPT ![self] = "Lcmpx2"]
+                      ELSE /\ pc' = [pc EXCEPT ![self] = "Lret"]
+                /\ UNCHANGED << mem, waitq, qlock, a, wake, stack, lprev, 
+                                lprev2, uprev, addr_, val, addr, nxt >>
 
-L3(self) == /\ pc[self] = "L3"
-            /\ lprev2' = [lprev2 EXCEPT ![self] = mem[a]]
-            /\ IF (mem[a]) = Acquired
-                  THEN /\ mem' = [mem EXCEPT ![a] = HasWaiters]
-                  ELSE /\ TRUE
-                       /\ mem' = mem
-            /\ IF lprev[self] = HasWaiters \/ lprev2'[self] /= Free
-                  THEN /\ pc' = [pc EXCEPT ![self] = "L4"]
-                  ELSE /\ pc' = [pc EXCEPT ![self] = "L5"]
-            /\ UNCHANGED << waitq, qlock, a, wake, stack, lprev, uprev, addr_, 
-                            val, addr, nxt >>
+Lcmpx2(self) == /\ pc[self] = "Lcmpx2"
+                /\ lprev2' = [lprev2 EXCEPT ![self] = mem[a]]
+                /\ IF (mem[a]) = Acquired
+                      THEN /\ mem' = [mem EXCEPT ![a] = HasWaiters]
+                      ELSE /\ TRUE
+                           /\ mem' = mem
+                /\ IF lprev[self] = HasWaiters \/ lprev2'[self] /= Free
+                      THEN /\ pc' = [pc EXCEPT ![self] = "call_wait"]
+                      ELSE /\ pc' = [pc EXCEPT ![self] = "Lcmpx3"]
+                /\ UNCHANGED << waitq, qlock, a, wake, stack, lprev, uprev, 
+                                addr_, val, addr, nxt >>
 
-L4(self) == /\ pc[self] = "L4"
-            /\ /\ addr_' = [addr_ EXCEPT ![self] = a]
-               /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "futex_wait",
-                                                        pc        |->  "L5",
-                                                        addr_     |->  addr_[self],
-                                                        val       |->  val[self] ] >>
-                                                    \o stack[self]]
-               /\ val' = [val EXCEPT ![self] = lprev[self]]
-            /\ pc' = [pc EXCEPT ![self] = "wt_acq"]
-            /\ UNCHANGED << mem, waitq, qlock, a, wake, lprev, lprev2, uprev, 
-                            addr, nxt >>
+call_wait(self) == /\ pc[self] = "call_wait"
+                   /\ /\ addr_' = [addr_ EXCEPT ![self] = a]
+                      /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "futex_wait",
+                                                               pc        |->  "Lcmpx3",
+                                                               addr_     |->  addr_[self],
+                                                               val       |->  val[self] ] >>
+                                                           \o stack[self]]
+                      /\ val' = [val EXCEPT ![self] = lprev[self]]
+                   /\ pc' = [pc EXCEPT ![self] = "wt_acq"]
+                   /\ UNCHANGED << mem, waitq, qlock, a, wake, lprev, lprev2, 
+                                   uprev, addr, nxt >>
 
-L5(self) == /\ pc[self] = "L5"
-            /\ lprev' = [lprev EXCEPT ![self] = mem[a]]
-            /\ IF (mem[a]) = Free
-                  THEN /\ mem' = [mem EXCEPT ![a] = HasWaiters]
-                  ELSE /\ TRUE
-                       /\ mem' = mem
-            /\ pc' = [pc EXCEPT ![self] = "L6"]
-            /\ UNCHANGED << waitq, qlock, a, wake, stack, lprev2, uprev, addr_, 
-                            val, addr, nxt >>
+Lcmpx3(self) == /\ pc[self] = "Lcmpx3"
+                /\ lprev' = [lprev EXCEPT ![self] = mem[a]]
+                /\ IF (mem[a]) = Free
+                      THEN /\ mem' = [mem EXCEPT ![a] = HasWaiters]
+                      ELSE /\ TRUE
+                           /\ mem' = mem
+                /\ pc' = [pc EXCEPT ![self] = "Ltest2"]
+                /\ UNCHANGED << waitq, qlock, a, wake, stack, lprev2, uprev, 
+                                addr_, val, addr, nxt >>
 
-L6(self) == /\ pc[self] = "L6"
-            /\ IF lprev[self] /= Free
-                  THEN /\ pc' = [pc EXCEPT ![self] = "L3"]
-                  ELSE /\ pc' = [pc EXCEPT ![self] = "L7"]
-            /\ UNCHANGED << mem, waitq, qlock, a, wake, stack, lprev, lprev2, 
-                            uprev, addr_, val, addr, nxt >>
+Ltest2(self) == /\ pc[self] = "Ltest2"
+                /\ IF lprev[self] /= Free
+                      THEN /\ pc' = [pc EXCEPT ![self] = "Lcmpx2"]
+                      ELSE /\ pc' = [pc EXCEPT ![self] = "Lret"]
+                /\ UNCHANGED << mem, waitq, qlock, a, wake, stack, lprev, 
+                                lprev2, uprev, addr_, val, addr, nxt >>
 
-L7(self) == /\ pc[self] = "L7"
-            /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
-            /\ lprev' = [lprev EXCEPT ![self] = Head(stack[self]).lprev]
-            /\ lprev2' = [lprev2 EXCEPT ![self] = Head(stack[self]).lprev2]
-            /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
-            /\ UNCHANGED << mem, waitq, qlock, a, wake, uprev, addr_, val, 
-                            addr, nxt >>
+Lret(self) == /\ pc[self] = "Lret"
+              /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
+              /\ lprev' = [lprev EXCEPT ![self] = Head(stack[self]).lprev]
+              /\ lprev2' = [lprev2 EXCEPT ![self] = Head(stack[self]).lprev2]
+              /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
+              /\ UNCHANGED << mem, waitq, qlock, a, wake, uprev, addr_, val, 
+                              addr, nxt >>
 
-lock(self) == L1(self) \/ L2(self) \/ L3(self) \/ L4(self) \/ L5(self)
-                 \/ L6(self) \/ L7(self)
+lock(self) == Lcmpx1(self) \/ Ltest1(self) \/ Lcmpx2(self)
+                 \/ call_wait(self) \/ Lcmpx3(self) \/ Ltest2(self)
+                 \/ Lret(self)
 
 u_xch(self) == /\ pc[self] = "u_xch"
                /\ uprev' = [uprev EXCEPT ![self] = mem[a]]
@@ -328,7 +336,7 @@ acq(self) == /\ pc[self] = "acq"
                                                   \o stack[self]]
              /\ lprev' = [lprev EXCEPT ![self] = defaultInitValue]
              /\ lprev2' = [lprev2 EXCEPT ![self] = defaultInitValue]
-             /\ pc' = [pc EXCEPT ![self] = "L1"]
+             /\ pc' = [pc EXCEPT ![self] = "Lcmpx1"]
              /\ UNCHANGED << mem, waitq, qlock, a, wake, uprev, addr_, val, 
                              addr, nxt >>
 

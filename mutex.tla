@@ -5,21 +5,20 @@ CONSTANT Processes
 
 variables lock = {};
 
-process p \in Processes 
+process proc \in Processes 
 begin
 
-ncs: skip;
-acq: await lock = {};
-     lock := {self};
-cs:  skip;
-rel: lock := lock \ {self};
-     goto ncs;
+ncs:  skip;
+acq:  await lock = {};
+      lock := {self};
+cs:   skip;
+rel:  lock := lock \ {self};
+      goto ncs;
 end process;
 
 end algorithm;
-
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "a75f7656" /\ chksum(tla) = "7a731c3a")
+\* BEGIN TRANSLATION (chksum(pcal) = "5e1306a3" /\ chksum(tla) = "551b377b")
 VARIABLES pc, lock
 
 vars == << pc, lock >>
@@ -36,7 +35,6 @@ ncs(self) == /\ pc[self] = "ncs"
              /\ lock' = lock
 
 acq(self) == /\ pc[self] = "acq"
-             /\ lock = {}
              /\ lock' = {self}
              /\ pc' = [pc EXCEPT ![self] = "cs"]
 
@@ -49,13 +47,13 @@ rel(self) == /\ pc[self] = "rel"
              /\ lock' = lock \ {self}
              /\ pc' = [pc EXCEPT ![self] = "ncs"]
 
-p(self) == ncs(self) \/ acq(self) \/ cs(self) \/ rel(self)
+proc(self) == ncs(self) \/ acq(self) \/ cs(self) \/ rel(self)
 
 (* Allow infinite stuttering to prevent deadlock on termination. *)
 Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
                /\ UNCHANGED vars
 
-Next == (\E self \in Processes: p(self))
+Next == (\E self \in Processes: proc(self))
            \/ Terminating
 
 Spec == Init /\ [][Next]_vars
@@ -63,5 +61,9 @@ Spec == Init /\ [][Next]_vars
 Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
 \* END TRANSLATION 
+
+InCriticalSection(p) == pc[p] = "cs"
+
+MutualExclusion == \A p1,p2 \in Processes : InCriticalSection(p1) /\ InCriticalSection(p2) => p1 = p2
 
 ====

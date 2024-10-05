@@ -29,7 +29,7 @@ Darren Hart, [a futex overview and update][3], November 11, 2009
 
 ## glibc
 
-[GNU C library POSIX threads implementation (nptl)][nptl]
+[GNU C library POSIX threads implementation (nptl)][nptl].
 
 [nptl]: https://sourceware.org/git/?p=glibc.git;a=tree;f=nptl;hb=HEAD
 

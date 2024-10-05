@@ -15,6 +15,12 @@ variables
     wake = {}; \* processes that have been sent a signal to wake up
 
 
+(******************************************************************************)
+(*                                                                            *)
+(* Atomics                                                                    *)
+(*                                                                            *)
+(******************************************************************************)
+
 macro atomic_compare_exchange(x, xwas, old, new) begin
     xwas := x;
     if x = old then 
@@ -27,19 +33,26 @@ macro atomic_exchange(x, xwas, new) begin
     x := new;
 end macro;
 
+(******************************************************************************)
+(*                                                                            *)
+(* Locking                                                                    *)
+(*                                                                            *)
+(******************************************************************************)
 
 procedure lock() 
-variable lprev, lprev2;
+variable lprev;
 begin
 Lcmpx1: 
+    \* Attempt to acquire the lock
     atomic_compare_exchange(mem[a], lprev, Free, Acquired);
 Ltest1: 
     if lprev /= Free then
 Lcmpx2:   
-        atomic_compare_exchange(mem[a], lprev2, Acquired, Contended);
-        if lprev = Contended \/ lprev2 /= Free then
+        \* Mark the lock as contended, assuming it'is in the acquired state 
+        atomic_compare_exchange(mem[a], lprev, Acquired, Contended);
+        if lprev /= Free then
 call_wait:     
-        call futex_wait(a, lprev);
+        call futex_wait(a, Contended);
       end if;
 Lcmpx3:   
         atomic_compare_exchange(mem[a], lprev, Free, Contended);
@@ -49,19 +62,6 @@ Ltest2:
       end if;
     end if;
 Lret: 
-    return;
-end procedure;
-
-procedure unlock() 
-variable uprev;
-begin
-u_xch: 
-    atomic_exchange(mem[a], uprev, Free);
-u_wake:
-    if uprev = Contended then
-        call futex_wake(a);
-    end if;
-u_ret: 
     return;
 end procedure;
 
@@ -85,6 +85,28 @@ wt_wait:
     wake := wake \ {self};
     return;
 end procedure;
+
+
+(******************************************************************************)
+(*                                                                            *)
+(* Unlocking                                                                  *)
+(*                                                                            *)
+(******************************************************************************)
+
+
+procedure unlock() 
+variable uprev;
+begin
+u_xch: 
+    atomic_exchange(mem[a], uprev, Free);
+u_wake:
+    if uprev = Contended then
+        call futex_wake(a);
+    end if;
+u_ret: 
+    return;
+end procedure;
+
 
 procedure futex_wake(addr) 
 variables nxt = {}

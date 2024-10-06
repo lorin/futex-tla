@@ -6,15 +6,14 @@
 EXTENDS Naturals, Sequences
 
 CONSTANTS Processes, Addresses, Free, Acquired, Contended
-Values == {Free, Acquired, Contended}
 
 (*--algorithm futex
 
 variables
     mem = [x \in Addresses |-> Free],
+    a \in Addresses,
     waitq = [x \in Addresses |-> <<>>], \* a map of addresses to wait queues
     qlock = {},  \* traditional mutex lock used by the kernel on the wait queue.
-    a \in Addresses,
     wake = {}; \* processes that have been sent a signal to wake up
 
 
@@ -99,26 +98,22 @@ end procedure;
 procedure futex_wake(addr)
 variables nxt = {}
 begin
-wk_acq:
-     await qlock = {};
-     qlock := {self};
-wk_deq:
-     if waitq[addr] /= <<>> then
-        nxt := {Head(waitq[addr])};
-        waitq[addr] := Tail(waitq[addr]);
-     end if;
-wk_rel:
-    qlock := {};
-wk_wake:
-    wake := wake \union nxt;
-    return;
+wk_acq:   await qlock = {};
+          qlock := {self};
+wk_deq:   if waitq[addr] /= <<>> then
+              nxt := {Head(waitq[addr])};
+              waitq[addr] := Tail(waitq[addr]);
+          end if;
+wk_rel:   qlock := {};
+wk_wake:  wake := wake \union nxt;
+          return;
 end procedure;
 
 process proc \in Processes
 begin
     ncs: skip;
     acq: call acquire_lock();
-    cs: skip;
+    cs:  skip;
     rel: call release_lock();
          goto ncs;
 end process;

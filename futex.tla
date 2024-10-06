@@ -367,18 +367,19 @@ Termination == <>(\A self \in ProcSet: pc[self] = "Done")
 
 MutualExclusion == \A p1,p2 \in Processes : pc[p1]="cs" /\ pc[p2]="cs" => p1=p2
 
-Stuck(x) == /\ pc[x] = "wt_wait"
-            /\ x \notin wake
-            /\ \A p \in Processes \ {x} : pc[p] = "ncs"
-
-NoneStuck == ~ \E x \in Processes : Stuck(x)
-
 LockIsHeld == mem[a] /= Free
 ProcessAttemptingToAcquireLock(p) == pc[p] \in {"Lcmpx1", "Ltest", "Lcmpx2", "call_wait", "Lcmpx3", "wt_acq", "wt_valcheck", "wt_enq", "wt_wait"}
 Contention == LockIsHeld /\ \E p \in Processes : ProcessAttemptingToAcquireLock(p)
-
 OnlyWaitUnderContention == \E p \in Processes : pc[p]="call_wait" => Contention
 
+
+Stuck(x) == /\ pc[x] = "wt_wait"
+            /\ x \notin wake
+            /\ \A p \in Processes \ {x} : \/ pc[p] \in {"ncs", "u_ret"}
+                                          \/ /\ pc[p] \in {"wk_rel", "wk_wake"}
+                                             /\ x \notin nxt[p]
+
+NoneStuck == ~ \E x \in Processes : Stuck(x)
 
 InAcquireLock(p) == pc[p] \in {"Lcmpx1", "Ltest", "Lcmpx2", "call_wait", "Lcmpx3", "Lret"}
 InFutexWait(p) == pc[p] \in {"wt_acq", "wt_valcheck", "wt_enq", "wt_wait"}
@@ -402,6 +403,10 @@ pcBar == [p \in Processes |->
               [] InFutexWake(p)                -> "ncs"
 ]
 
+mutex == INSTANCE mutex WITH lock <- lockBar, pc <- pcBar
+
+ImplementsMutex == mutex!Spec
+
 Alias == [
     pc |-> pc,
     pcBar |-> pcBar,
@@ -410,8 +415,5 @@ Alias == [
     lockBar |-> lockBar
 ]
 
-mutex == INSTANCE mutex WITH lock <- lockBar, pc <- pcBar
-
-ImplementsMutex == mutex!Spec
 
 ====
